@@ -16,18 +16,14 @@ router.route("/getAllUsers").get(userController.getAllUsers);
 // Protect all routes after this middleware
 router.use(authController.protect);
 
-router.get('/getUserById/:id',  userController.getUserById);
+router.get("/getUserById/:id", userController.getUserById);
 
-router.patch(
-  "/updateMyPassword", userController.updatePassword);
+router.patch("/updateMyPassword", authController.updatePassword);
 
 router.delete("/deleteMe", userController.deleteMe);
 
 router.get("/me", userController.getMe, userController.getOne);
-router.patch(
-  "/updateMe",
-  userController.updateMe
-);
+router.patch("/updateMe", userController.updateMe);
 
 router.patch(
   "/updateMyPhoto",
@@ -36,7 +32,3 @@ router.patch(
 );
 
 module.exports = router;
-
-
-
-

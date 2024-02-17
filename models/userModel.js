@@ -3,65 +3,70 @@ const validator = require("validator");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 
-const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, "Please tell us your name!"],
-  },
-  email: {
-    type: String,
-    unique: true,
-    lowercase: true,
-    required: [true, "Please provide an email"],
-    validate: [validator.isEmail, "Please provide a valid email"],
-  },
-  photo: {
-    type: String,
-    default: "default.jpg",
-  },
-  password: {
-    type: String,
-    required: [true, "Please provide a password"],
-    minlength: 6,
-    select: false,
-  },
-  passwordConfirm: {
-    type: String,
-    required: [true, "Please confirm your password"],
-    // This only works on CREATE and SAVE!!!
-    validate: {
-      validator: function (el) {
-        return el === this.password;
+const userSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Please tell us your name!"],
+    },
+    email: {
+      type: String,
+      unique: true,
+      lowercase: true,
+      required: [true, "Please provide an email"],
+      validate: [validator.isEmail, "Please provide a valid email"],
+    },
+    photo: {
+      public_id: {
+        type: String,
       },
-      message: "Passwords are not the same!",
+      url: {
+        type: String,
+        default: "default.jpg",
+      },
+    },
+    password: {
+      type: String,
+      required: [true, "Please provide a password"],
+      minlength: 6,
+      select: false,
+    },
+    passwordConfirm: {
+      type: String,
+      required: [true, "Please confirm your password"],
+      // This only works on CREATE and SAVE!!!
+      validate: {
+        validator: function (el) {
+          return el === this.password;
+        },
+        message: "Passwords are not the same!",
+      },
+    },
+    phone: {
+      type: String,
+      required: [true, "Please provide your phone number"],
+    },
+
+    passwordResetToken: String,
+    passwordResetExpires: Date,
+    active: {
+      type: Boolean,
+      default: true,
+      select: false,
     },
   },
-  phone: {
-    type: String,
-    required: [true, "Please provide your phone number"],
-  },
-
-  passwordResetToken: String,
-  passwordResetExpires: Date,
-  active: {
-    type: Boolean,
-    default: true,
-    select: false,
-  },
-},
   {
     toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
   }
 );
 
 // virtual populate
-userSchema.virtual('posts', {
-  ref: 'Post',
-  foreignField: 'user',
-  localField: '_id'
+userSchema.virtual("posts", {
+  ref: "Post",
+  foreignField: "user",
+  localField: "_id",
 });
-
 
 // use document middleware to encrypt the password
 userSchema.pre("save", async function (next) {
@@ -119,6 +124,19 @@ userSchema.methods.createPasswordResetToken = function () {
 
   return resetToken;
 };
+
+userSchema.pre("findOneAndUpdate", async function (next) {
+  if (!this._update.photo) return next(); // Check if photo field is being updated
+  try {
+    const docToUpdate = await this.model.findOne(this.getQuery());
+    if (docToUpdate.photo && docToUpdate.photo !== "default.jpg") {
+      await cloudinaryRemoveImage(docToUpdate.photo);
+    }
+  } catch (err) {
+    console.error("Error deleting old photo:", err);
+  }
+  next();
+});
 
 const User = mongoose.model("User", userSchema);
 module.exports = User;

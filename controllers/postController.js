@@ -1,31 +1,148 @@
 const Post = require("../models/postModel");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/appError");
-const sharp = require('sharp');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const {    cloudinaryUploadImage,
-  cloudinaryRemoveImage } = require('../utils/cloudinary');
-
-const DataURIParser = require('datauri/parser');
+const User = require("./userController");
+const sharp = require("sharp");
+const multer = require("multer");
+const {
+  cloudinaryUploadImage,
+  cloudinaryRemoveImage,
+} = require("../utils/cloudinary");
+const fs = require("fs");
+const DataURIParser = require("datauri/parser");
 const duri = new DataURIParser();
+const path = require("path");
 
+const uploadDirectory = path.join(__dirname, "../public/images/posts");
+
+const imagesStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDirectory);
+  },
+  filename: (req, file, cb) => {
+    if (file) {
+      cb(null, new Date().toISOString().replace(/:/g, "-") + file.originalname);
+    } else {
+      cb(null, false);
+    }
+  },
+});
+
+// Multer filter to test if the uploaded file is an images
+const multerFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image")) {
+    cb(null, true);
+  } else {
+    cb(new Error("Not an image! Please upload images only."), false);
+  }
+};
+
+// multer middleware for upload images
+const uploadImages = multer({
+  storage: imagesStorage,
+  fileFilter: multerFilter,
+});
+exports.uploadPostImages = uploadImages.fields([
+  { name: "images", maxCount: 3 },
+]);
+
+exports.resizePostImages = catchAsync(async (req, res, next) => {
+  // 1. Check if images were uploaded
+  if (!req.files.images) {
+    // If no images are provided, simply skip the image update process
+    return next();
+  }
+  //2) Initialize array to store image data
+  req.body.images = [];
+
+  try {
+    //3) Upload each image to Cloudinary and process asynchronously
+    await Promise.all(
+      req.files.images.map(async (file, i) => {
+        // Upload image to Cloudinary
+        const result = await cloudinaryUploadImage(file.path);
+
+        //4) Construct image data object with URL and public ID
+        const imageData = {
+          url: result.secure_url,
+          public_id: result.public_id,
+        };
+
+        //5) Store image data in array
+        req.body.images.push(imageData);
+
+        //6) Remove uploaded file from server
+        fs.unlinkSync(file.path);
+      })
+    );
+
+    // Move to next middleware
+    next();
+  } catch (error) {
+    // Handle any errors
+    return next(new AppError("Error resizing and uploading images", 500));
+  }
+});
+
+exports.updatePostImages = catchAsync(async (req, res, next) => {
+  // Check if files are provided
+  if (!req.files.images) {
+    // If no images are provided, simply skip the image update process
+    return next();
+  }
+
+  try {
+    const postId = req.params.id;
+    const post = await Post.findById(postId);
+
+    //1) Delete old images from Cloudinary
+    if (post.images && post.images.length > 0) {
+      await Promise.all(
+        post.images.map(async (image) => {
+          await cloudinaryRemoveImage(image.public_id);
+        })
+      );
+    }
+
+    req.body.images = [];
+    // 2) Upload updated images to cloudinary server
+    await Promise.all(
+      req.files.images.map(async (file, i) => {
+        const result = await cloudinaryUploadImage(file.path);
+
+        //ensure that information about each uploaded image, such as its URL and public ID, is collected
+
+        const imageData = {
+          url: result.secure_url,
+          public_id: result.public_id,
+        };
+        //and stored in an array for further processing or storage, such as updating the post document in the database.
+        req.body.images.push(imageData);
+
+        // Remove file from server once it has been saved in Cloudinary
+        fs.unlinkSync(file.path);
+      })
+    );
+
+    next();
+  } catch (error) {
+    return next(new AppError("Error resizing and uploading images", 500));
+  }
+});
 
 exports.getLatestPosts = catchAsync(async (req, res, next) => {
   const limit = 10; // Number of posts to retrieve
   const sortQuery = { createdAt: -1 }; // Sort by createdAt field in descending order
 
-    const posts = await Post.find().limit(limit).sort(sortQuery);
+  const posts = await Post.find().limit(limit).sort(sortQuery);
 
-    res.status(200).json({
-      status: "success",
-      results: posts.length,
-      data: {
-        posts
-      }
-    });
-
+  res.status(200).json({
+    status: "success",
+    results: posts.length,
+    data: {
+      posts,
+    },
+  });
 });
 
 exports.getAllPosts = catchAsync(async (req, res, next) => {
@@ -35,15 +152,13 @@ exports.getAllPosts = catchAsync(async (req, res, next) => {
     status: "success",
     results: posts.length,
     data: {
-      posts
+      posts,
     },
   });
 });
 
 exports.getAllCategories = catchAsync(async (req, res, next) => {
   const categories = Post.schema.path("category").enumValues;
-
-  console.log(categories);
   res.status(200).json({
     status: "success",
     data: {
@@ -84,65 +199,19 @@ exports.getPostsByCategory = catchAsync(async (req, res, next) => {
   });
 });
 
-
-
-// Get single post by ID
 exports.getPost = catchAsync(async (req, res, next) => {
   const post = await Post.findById(req.params.id);
   if (!post) {
-    return next(new AppError("No post found with that ID", 404));
+    return next(new AppError("No Post found with that ID", 404));
   }
 
   res.status(200).json({
     status: "success",
     data: {
       post,
- 
     },
   });
 });
-
-const multerStorage = multer.memoryStorage();
-
-// filter to test if the uploaded file is an image
-const multerFilter = (req, file, cb) => {
-  if(file.mimetype.startsWith('image')){
-    cb(null, true);
-  }else{
-    cb(new AppError("Not an image! Please upload images only.", 400));
-  }
-};
-
-// midlleware for upload photo 
-const upload = multer({
-  storage: multerStorage,
-  fileFilter: multerFilter
-});
-
-exports.uploadPostImages = upload.fields([
-  { name:'images',maxCount: 3}
- 
- ]);
-
- exports.resizePostImages = catchAsync(async (req, res, next) => {
-  if (!req.files.images) return next(new AppError('No files found with given name', 400));
-
-  // 1) Images
-  req.body.images = [];
-
-  await Promise.all(
-    req.files.images.map(async (file, i) => {
-      // Upload image to Cloudinary
-      const newImagePath = duri.format(path.extname(file.originalname).toString(), file.buffer);
-      const result = await cloudinaryUploadImage(newImagePath.content);
-      req.body.images.push(result.secure_url);
-    })
-  );
-
-  next();
-});
-
-
 
 exports.createPost = catchAsync(async (req, res, next) => {
   // Create a new post without populating the user field
@@ -151,7 +220,7 @@ exports.createPost = catchAsync(async (req, res, next) => {
 
   // Populate the user field in the newly created post
   const populatedPost = await Post.findById(newPost._id).populate("user");
-  // console.log("New Post ID:", newPost._id);
+  //console.log("New Post ID:", newPost._id);
   // console.log("Populated User:", populatedPost.user);
   res.status(201).json({
     status: "success",
@@ -161,48 +230,61 @@ exports.createPost = catchAsync(async (req, res, next) => {
   });
 });
 
-
 exports.updatePost = catchAsync(async (req, res, next) => {
- 
-    // Check if the post exists
-    const post = await Post.findById(req.params.id);
-    if (!post) {
-      return next(new AppError("No post found with that ID", 404));
-    }
-    // Check if the authenticated user owns the post
-    if (req.user.id !== post.user.id) {
-      return next(new AppError('You do not have permission to edit this post', 403));
-    }
-    // Update the post
-    const updatedPost = await Post.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
-    
-    res.status(200).json({
-      status: "success",
-      data: {
-        post: updatedPost,
-      },
-    });
+  // Check if the post exists
+  const post = await Post.findById(req.params.id);
+  if (!post) {
+    return next(new AppError("No post found with that ID", 404));
+  }
 
+  // Check if the authenticated user owns the post
+  if (req.user.id !== post.user.id) {
+    return next(
+      new AppError("You do not have permission to edit this post", 403)
+    );
+  }
+
+  // Update the post
+  const updatedPost = await Post.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+    runValidators: true,
+  });
+
+  res.status(200).json({
+    status: "success",
+    data: {
+      post: updatedPost,
+    },
+  });
 });
 
 exports.deletePost = catchAsync(async (req, res, next) => {
-    // Check if the post exists
-    const post = await Post.findById(req.params.id);
-    if (!post) {
-      return next(new AppError("No post found with that ID", 404));
-    }
-    // Check if the authenticated user owns the post
-    if (req.user.id !== post.user.id) {
-      return next(new AppError('You do not have permission to delete this post', 403));
-    }
-    // Delete the post
-    await Post.findByIdAndDelete(req.params.id);
+  // Check if the post exists
+  const post = await Post.findById(req.params.id);
 
-    res.status(204).json({
-      status: "success",
-      post: null,
-    });
+  // Delete old images from Cloudinary
+  if (post.images && post.images.length > 0) {
+    await Promise.all(
+      post.images.map(async (image) => {
+        await cloudinaryRemoveImage(image.public_id);
+      })
+    );
+  }
+  if (!post) {
+    return next(new AppError("No post found with that ID", 404));
+  }
+
+  // Check if the authenticated user owns the post
+  if (req.user.id !== post.user.id) {
+    return next(
+      new AppError("You do not have permission to delete this post", 403)
+    );
+  }
+
+  // Update the post
+  await Post.findByIdAndDelete(req.params.id);
+  res.status(204).json({
+    status: "success",
+    data: null,
+  });
 });

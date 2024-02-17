@@ -5,7 +5,7 @@ const AppError = require("../utils/appError");
 const multer = require("multer");
 const sharp = require("sharp");
 const sendEmail = require("../utils/email");
-const path = require("path");
+
 const fs = require("fs");
 const {
   cloudinaryUploadImage,
@@ -14,9 +14,24 @@ const {
 
 const DataURIParser = require("datauri/parser");
 const duri = new DataURIParser();
+const path = require("path");
 
-// a file is uploaded, Multer will store the file data in memory rather than storing it on disk
-const multerStorage = multer.memoryStorage();
+//Define Upload Directory and
+// Define the destination directory for storing uploaded files locally
+const uploadDirectory = path.join(__dirname, "../public/images/users");
+
+// a file is uploaded, Multer will store the file data on disk in the specified destination directory
+const multerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDirectory);
+  },
+  filename: (req, file, cb) => {
+    // generates unique filenames for each uploaded file.
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+  },
+});
 
 // filter to test if the uploaded file is an image
 const multerFilter = (req, file, cb) => {
@@ -27,50 +42,47 @@ const multerFilter = (req, file, cb) => {
   }
 };
 
-// midlleware for upload photo
+// middleware for uploading photo
 const upload = multer({
   storage: multerStorage,
   fileFilter: multerFilter,
 });
 exports.uploadUserPhoto = upload.single("photo");
-
 exports.UserProfilePhoto = catchAsync(async (req, res, next) => {
-  // 1) validation
+  // 1) Validation
   if (!req.file) return next(new AppError("No photo provided", 400));
 
-  // 2) get the path to the image
-  // const imageName = `user-${req.user.id}-${Date.now()}.jpeg`;
-  // console.log(req.file)
-  // const imagePath = path.join(__dirname, `../public/img/users/${imageName}`);
+  // 2) Get the path to the uploaded image
+  const imagePath = path.join(uploadDirectory, req.file.filename);
 
-  const newImagePath = duri.format(
-    path.extname(req.file.originalname).toString(),
-    req.file.buffer
-  );
+  // 3) Upload the image to Cloudinary
+  const result = await cloudinaryUploadImage(imagePath);
 
-  //console.log(newImagePath.content);
-
-  // 3) upload to  cloudinary
-  const result = await cloudinaryUploadImage(newImagePath.content);
-  //console.log({ result });
-
-  //      // Update the user document in the database with the secure_url
+  // 4) It retrieves the user document from the database
   const user = await User.findById(req.user.id);
 
-  // 5) delete the old photo if exist
-  if (user.photo && user.photo !== "") {
-    await cloudinaryRemoveImage(user.photo);
+  //5) Delete the old photo from Cloudinary
+  if (user.photo && user.photo.public_id) {
+    await cloudinaryRemoveImage(user.photo.public_id);
   }
 
-  // 6) change the photo field in the DB
+  //6)  Update the user's photo data
+  user.photo = {
+    public_id: result.public_id,
+    url: result.secure_url,
+  };
+
+  // 6) updates the user's photo data with the Cloudinary URL.
   user.photo = result.secure_url;
   user.markModified("photo"); // Mark the photo field as modified
-  user.passwordConfirm = user.password; // Set passwordConfirm to match the password
   await user.save({ validateBeforeSave: false });
+
+  // 7) Delete the local image file after it has been uploaded to Cloudinary
+  fs.unlinkSync(imagePath);
 
   res.status(200).json({
     success: true,
-    message: "your photo updated successfully",
+    message: "Your photo updated successfully",
     data: {
       user,
     },
@@ -100,13 +112,6 @@ exports.updateMe = catchAsync(async (req, res, next) => {
   if (req.body.email) {
     return next(new AppError("Email cannot be changed.", 400));
   }
-
-  // if(req.file) {
-  //   return next(
-  //     new AppError('You cannot update your profile photo from this route. Please use /updateMyProfilePhoto.', 400)
-  //   );
-  // }
-
   // 2) Filtered out unwanted fields names that are allowed to be updated
   const filteredBody = filterObj(req.body, "name", "phone");
 
@@ -115,8 +120,7 @@ exports.updateMe = catchAsync(async (req, res, next) => {
     new: true,
     runValidators: true,
   });
-  console.log("Updated User:", updatedUser);
-
+  //console.log("Updated User:", updatedUser);
   res.status(200).json({
     status: "success",
     data: {
@@ -149,6 +153,10 @@ exports.getOne = catchAsync(async (req, res, next) => {
 
 exports.deleteMe = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
+  // Delete the old photo from Cloudinary
+  if (userId.photo && userId.photo.public_id) {
+    await cloudinaryRemoveImage(userId.photo.public_id);
+  }
   //Remove users posts
   await Promise.all([
     User.findByIdAndDelete(userId),

@@ -62,13 +62,13 @@ exports.UserProfilePhoto = catchAsync(async (req, res, next) => {
   const user = await User.findById(req.user.id);
 
   //5) Delete the old photo from Cloudinary
-  if (user.photo && user.photo.publicId) {
-    await cloudinaryRemoveImage(user.photo.publicId);
+  if (user.photo && user.photo.public_id) {
+    await cloudinaryRemoveImage(user.photo.public_id);
   }
 
   //6)  Update the user's photo data
   user.photo = {
-    publicId: result.publicId,
+    public_id: result.public_id,
     url: result.secure_url,
   };
 
@@ -154,8 +154,8 @@ exports.getOne = catchAsync(async (req, res, next) => {
 exports.deleteMe = catchAsync(async (req, res, next) => {
   const userId = req.user.id;
   // Delete the old photo from Cloudinary
-  if (userId.photo && userId.photo.publicId) {
-    await cloudinaryRemoveImage(userId.photo.publicId);
+  if (userId.photo && userId.photo.public_id) {
+    await cloudinaryRemoveImage(userId.photo.public_id);
   }
   //Remove users posts
   await Promise.all([

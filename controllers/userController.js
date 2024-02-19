@@ -95,7 +95,7 @@ exports.UserProfilePhoto = catchAsync(async (req, res, next) => {
   await user.save({ validateBeforeSave: false });
 
   // 7) Delete the local image file after it has been uploaded to Cloudinary
-  fs.unlinkSync(imagePath);
+  //fs.unlinkSync(imagePath);
 
   res.status(200).json({
     success: true,

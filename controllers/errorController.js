@@ -39,10 +39,10 @@ const sendErrorDev = (err, req, res) => {
 
   // B) RENDERED WEBSITE
   console.error("ERROR 💥", err);
-  return res.status(err.statusCode).render("error", {
+  /* return res.status(err.statusCode).render("error", {
     title: "Something went wrong!",
     msg: err.message,
-  });
+  }); */
 };
 
 const sendErrorProd = (err, req, res) => {

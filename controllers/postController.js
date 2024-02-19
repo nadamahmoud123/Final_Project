@@ -65,7 +65,7 @@ exports.resizePostImages = catchAsync(async (req, res, next) => {
         //4) Construct image data object with URL and public ID
         const imageData = {
           url: result.secure_url,
-          public_id: result.public_id,
+          publicId: result.publicId,
         };
 
         //5) Store image data in array
@@ -99,7 +99,7 @@ exports.updatePostImages = catchAsync(async (req, res, next) => {
     if (post.images && post.images.length > 0) {
       await Promise.all(
         post.images.map(async (image) => {
-          await cloudinaryRemoveImage(image.public_id);
+          await cloudinaryRemoveImage(image.publicId);
         })
       );
     }
@@ -114,7 +114,7 @@ exports.updatePostImages = catchAsync(async (req, res, next) => {
 
         const imageData = {
           url: result.secure_url,
-          public_id: result.public_id,
+          publicId: result.publicId,
         };
         //and stored in an array for further processing or storage, such as updating the post document in the database.
         req.body.images.push(imageData);
@@ -266,7 +266,7 @@ exports.deletePost = catchAsync(async (req, res, next) => {
   if (post.images && post.images.length > 0) {
     await Promise.all(
       post.images.map(async (image) => {
-        await cloudinaryRemoveImage(image.public_id);
+        await cloudinaryRemoveImage(image.publicId);
       })
     );
   }

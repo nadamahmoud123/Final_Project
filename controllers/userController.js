@@ -21,7 +21,7 @@ const path = require("path");
 const uploadDirectory = path.join(__dirname, "../public/images/users");
 
 // a file is uploaded, Multer will store the file data on disk in the specified destination directory
-const multerStorage = multer.diskStorage({
+/* const multerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDirectory);
   },
@@ -30,6 +30,18 @@ const multerStorage = multer.diskStorage({
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname);
     cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+  },
+}); */
+const multerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDirectory);
+  },
+  filename: (req, file, cb) => {
+    if (file) {
+      cb(null, new Date().toISOString().replace(/:/g, "-") + file.originalname);
+    } else {
+      cb(null, false);
+    }
   },
 });
 

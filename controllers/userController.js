@@ -67,6 +67,11 @@ exports.UserProfilePhoto = catchAsync(async (req, res, next) => {
   // 2) Get the path to the uploaded image
   const imagePath = path.join(uploadDirectory, req.file.filename);
 
+  // 3) Check if the file exists
+  if (!fs.existsSync(imagePath)) {
+    return next(new AppError("Uploaded file not found", 404));
+  }
+
   // 3) Upload the image to Cloudinary
   const result = await cloudinaryUploadImage(imagePath);
 

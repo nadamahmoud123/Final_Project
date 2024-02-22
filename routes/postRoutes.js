@@ -35,5 +35,6 @@ router.get(
   authController.protect,
   postController.getPostsByCategory
 );
+router.get("/search/:q", postController.searchPostsByContent);
 
 module.exports = router;

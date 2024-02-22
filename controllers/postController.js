@@ -288,3 +288,23 @@ exports.deletePost = catchAsync(async (req, res, next) => {
     data: null,
   });
 });
+exports.searchPostsByContent = catchAsync(async (req, res, next) => {
+  const query = req.params.q; // Retrieve the search query from route parameters
+
+  try {
+    // Perform search using a regex pattern to match the query in the content field
+    const posts = await Post.find({
+      content: { $regex: query, $options: "i" },
+    });
+
+    res.status(200).json({
+      status: "success",
+      results: posts.length,
+      data: {
+        posts,
+      },
+    });
+  } catch (error) {
+    return next(new AppError("Error searching posts", 500));
+  }
+});

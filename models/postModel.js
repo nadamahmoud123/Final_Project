@@ -39,6 +39,10 @@ const postSchema = new mongoose.Schema({
     ],
     required: true,
   },
+  price: {
+    type: Number,
+    default: null,
+  },
 });
 
 postSchema.pre(/^find/, function (next) {

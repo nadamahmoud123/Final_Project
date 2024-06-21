@@ -216,6 +216,10 @@ exports.getPost = catchAsync(async (req, res, next) => {
 exports.createPost = catchAsync(async (req, res, next) => {
   // Create a new post without populating the user field
   req.body.user = req.user.id;
+  // Check if price is provided, set it to null if not
+  if (!req.body.price) {
+    req.body.price = null;
+  }
   const newPost = await Post.create(req.body);
 
   // Populate the user field in the newly created post
@@ -235,6 +239,10 @@ exports.updatePost = catchAsync(async (req, res, next) => {
   const post = await Post.findById(req.params.id);
   if (!post) {
     return next(new AppError("No post found with that ID", 404));
+  }
+  // Check if price is provided, set it to null if not
+  if (!req.body.price) {
+    req.body.price = null;
   }
 
   // Check if the authenticated user owns the post
@@ -307,4 +315,28 @@ exports.searchPostsByContent = catchAsync(async (req, res, next) => {
   } catch (error) {
     return next(new AppError("Error searching posts", 500));
   }
+});
+
+exports.getFreePosts = catchAsync(async (req, res, next) => {
+  const freePosts = await Post.find({ price: null });
+
+  res.status(200).json({
+    status: "success",
+    results: freePosts.length,
+    data: {
+      posts: freePosts,
+    },
+  });
+});
+
+exports.getPaidPosts = catchAsync(async (req, res, next) => {
+  const paidPosts = await Post.find({ price: { $ne: null } });
+
+  res.status(200).json({
+    status: "success",
+    results: paidPosts.length,
+    data: {
+      posts: paidPosts,
+    },
+  });
 });
